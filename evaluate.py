@@ -19,7 +19,6 @@ if __name__ == "__main__":
 
     out = np.concatenate([gray_pic,appendix_pic,out_pic[:, :, ::-1]], axis = 1)
 
-    cv.imshow('Result : ', out)
-    cv.waitKey(0)
+    cv.imwrite('result.bmp', out)
 
     pass
