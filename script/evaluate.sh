@@ -1,1 +1,1 @@
-python evaluate.py
+python main.py --mode evaluate --model CO
