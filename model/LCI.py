@@ -77,7 +77,6 @@ class LCI(nn.Module):
             nn.Sigmoid(),
             InterPolate(),
         )
-
     
     def forward(self, x):
 
@@ -116,6 +115,7 @@ class LCI(nn.Module):
         volume = self.colorization_seq(volume)
         
         return volume
+
 
 if __name__ == "__main__":
     model = LCI()

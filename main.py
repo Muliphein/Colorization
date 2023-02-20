@@ -1,5 +1,5 @@
 import cv2 as cv
-from model import CO, LCI
+from model import CO, LCI, P2P
 import numpy as np
 import torch
 import torch.nn as nn
@@ -24,24 +24,28 @@ def deal_args():
     parser.add_argument('--epoch', type=int, default=200)
     parser.add_argument('--bs', type=int, default=256)
     parser.add_argument('--num_workers', type=int, default=8)
+    parser.add_argument('--p2p_lambda', type=float, default=10.0)
     args = parser.parse_args()
     return args
 
 
 class Training():
     def __init__(self, args) -> None:
+        self.args = args
+
+        # Get Model
         if args.model == "LCI":
             self.model = LCI()
+        elif args.model == "P2P":
+            self.model = P2P()
         else:
-            print('Not Implement')
-            assert(False)
+            raise(NotImplementedError)
 
         if args.dataset == "Places":
             self.testset = ImageDataset('./data/Places205/testset/')
             self.trainset = ImageDataset('./data/Places205/trainset/')
         else:
-            print('Not Implement')
-            assert(False)
+            raise(NotImplementedError)
 
         if args.logsdir == None:
             args.logsdir = f'./logs/{args.model}_{args.dataset}/'
@@ -59,35 +63,72 @@ class Training():
         self.EPOCH_MAX = args.epoch
         self.model.cuda()
         
-        # Load Check Point
+        # Get Dataset
         
         self.testloader = DataLoader(self.testset, batch_size=args.bs, shuffle=False, num_workers=args.num_workers)
         self.trainloader = DataLoader(self.trainset, batch_size=args.bs, shuffle=True, num_workers=args.num_workers)
 
         self.mse_loss = nn.MSELoss(reduction='sum')
-        self.optimizer = torch.optim.Adam(self.model.parameters())
+        self.bce_loss = nn.BCEWithLogitsLoss()
+        self.l1_loss = nn.L1Loss()
+
+        # Set Optim (Model-Based)
+        if args.model == "LCI":
+            self.optimizer = torch.optim.Adam(self.model.parameters())
+        elif args.model == "P2P":
+            self.optimizerG = torch.optim.Adam(self.model.netG.parameters())
+            self.optimizerD = torch.optim.Adam(self.model.netD.parameters())
+        else:
+            raise(NotImplementedError)
+
         self.now_epoch = 0
 
         if args.ckpt is not None:
             self.load_ckpt(args.ckpt)
     
-
     def load_ckpt(self, ckpt):
-        checkpoint = torch.load(ckpt, map_location=torch.device("cpu"))
-        self.model.load_state_dict(checkpoint['model'])
-        self.optimizer.load_state_dict(checkpoint['optim'])
-        self.now_epoch = checkpoint['epoch']+1
+        # Load CKPT (Model-Based)
+        if self.args.model == "LCI":
+            checkpoint = torch.load(ckpt, map_location=torch.device("cpu"))
+            self.model.load_state_dict(checkpoint['model'])
+            self.optimizer.load_state_dict(checkpoint['optim'])
+            self.now_epoch = checkpoint['epoch']+1
+        elif self.args.model == "P2P":
+            checkpoint = torch.load(ckpt, map_location=torch.device("cpu"))
+            self.model.load_state_dict(checkpoint['model'])
+            self.optimizerG.load_state_dict(checkpoint['optimG'])
+            self.optimizerD.load_state_dict(checkpoint['optimD'])
+            self.now_epoch = checkpoint['epoch']+1
+        else:
+            raise(NotImplementedError)
         print(f'Load CheckPoint {ckpt}')
 
     def save_ckpt(self):
         ckpt_save_path = self.LOG_DIR + f'ckpt/{self.now_epoch}.pt'
-        torch.save(
-            {
-                'epoch' : self.now_epoch,
-                'model' : self.model.state_dict(),
-                'optim' : self.optimizer.state_dict()
-            }, ckpt_save_path
-        )
+        
+        # Save CKPT (Model-Based)
+        
+        if self.args.model == "LCI":
+            torch.save(
+                {
+                    'epoch' : self.now_epoch,
+                    'model' : self.model.state_dict(),
+                    'optim' : self.optimizer.state_dict()
+                }, ckpt_save_path
+            )
+        
+        elif self.args.model == "P2P":
+            torch.save(
+                {
+                    'epoch' : self.now_epoch,
+                    'model' : self.model.state_dict(),
+                    'optimG' : self.optimizerG.state_dict(),
+                    'optimD' : self.optimizerD.state_dict(),
+                }, ckpt_save_path
+            )
+
+        else:
+            raise(NotImplementedError)
         print(f'Save CheckPoint to {ckpt_save_path}')
 
     def write_to_csv(self, filename, items):
@@ -143,47 +184,109 @@ class Training():
         io.imsave(name, img_all)
 
     def train_epoch(self):
-        epoch_loss = 0.0
-        self.model.train()
-        with tqdm(total=len(self.trainloader), ncols=80, desc=f'Train:Epoch-{self.now_epoch}') as tbar:
-            for batch_id, data in enumerate(self.trainloader):
-                L_chan, ab_chan = data
-                L_chan = L_chan.to(self.DEVICES)
-                ab_chan = ab_chan.to(self.DEVICES)
-                self.optimizer.zero_grad()
-                ab_out = self.model(L_chan)
-                loss = self.mse_loss(ab_chan, ab_out)
-                loss.backward()
-                self.optimizer.step()
-                batch_loss = loss.item()
-                self.write_to_csv(self.LOG_DIR+'train_batch.csv', [batch_id, batch_loss])
-                epoch_loss += batch_loss * data[0].shape[0]
-                tbar.update(1)
-                if batch_id % 1000 == 0:
-                    self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-train/{self.now_epoch}_{batch_id}.jpg')
+        if self.args.model == "LCI":
+            epoch_loss = 0.0
+            self.model.train()
+            with tqdm(total=len(self.trainloader), ncols=80, desc=f'Train:Epoch-{self.now_epoch}') as tbar:
+                for batch_id, data in enumerate(self.trainloader):
+                    L_chan, ab_chan = data
+                    L_chan = L_chan.to(self.DEVICES)
+                    ab_chan = ab_chan.to(self.DEVICES)
+                    self.optimizer.zero_grad()
+                    ab_out = self.model(L_chan)
+                    loss = self.mse_loss(ab_chan, ab_out)
+                    loss.backward()
+                    self.optimizer.step()
+                    batch_loss = loss.item()
+                    self.write_to_csv(self.LOG_DIR+'train_batch.csv', [batch_id, batch_loss])
+                    epoch_loss += batch_loss * data[0].shape[0]
+                    tbar.update(1)
+                    if batch_id % 1000 == 0:
+                        self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-train/{self.now_epoch}_{batch_id}.jpg')
 
-        epoch_loss /= len(self.trainset)
-        self.write_to_csv(self.LOG_DIR+'train_epoch_loss.csv', [epoch_loss, ])
+            epoch_loss /= len(self.trainset)
+            self.write_to_csv(self.LOG_DIR+'train_epoch_loss.csv', [epoch_loss, ])
+        elif self.args.model == "P2P":
+            epoch_loss_G = 0.0
+            self.model.train()
+            with tqdm(total=len(self.trainloader), ncols=80, desc=f'Train:Epoch-{self.now_epoch}') as tbar:
+                for batch_id, data in enumerate(self.trainloader):
+                    L_chan, ab_chan = data
+                    L_chan = L_chan.to(self.DEVICES)
+                    ab_chan = ab_chan.to(self.DEVICES)
+                    ab_fake = self.model.netG(L_chan)
+                    d_real = self.model.netD(L_chan, ab_chan)
+                    d_real_loss = self.bce_loss(d_real, torch.ones_like(d_real))
+                    d_fake = self.model.netD(L_chan, ab_fake)
+                    d_fake_loss = self.bce_loss(d_fake, torch.zeros_like(d_fake))
+                    d_loss = (d_real_loss + d_fake_loss) / 2
+                    self.optimizerD.zero_grad()
+                    d_loss.backward()
+                    self.optimizerD.step()
+
+                    g_fake = self.netG(L_chan, ab_fake)
+                    g_fake_loss = self.bce_loss(g_fake, torch.ones_like(g_fake))
+                    l_loss = self.mse_loss(ab_fake, ab_chan) * self.args.p2p_lambda
+                    g_loss = l_loss + g_fake_loss
+                    self.optimizerG.zero_grad()
+                    g_loss.backward()
+                    self.optimizerG.step()
+
+                    batch_loss = l_loss.item()/self.args.p2p_lambda
+                    batch_d_loss = d_loss.item()
+                    epoch_loss_G += batch_loss * data[0].shape[0]
+                    self.write_to_csv(self.LOG_DIR+'train_batch.csv', [batch_id, batch_loss, batch_d_loss])
+
+                    if batch_id % 1000 == 0:
+                        self.save_pic(L_chan, ab_chan, ab_fake, self.LOG_DIR + f'images-train/{self.now_epoch}_{batch_id}.jpg')
+
+            epoch_loss_G /= len(self.trainset)
+            self.write_to_csv(self.LOG_DIR+'train_epoch_loss.csv', [epoch_loss_G, ])
+        else :
+            print('Not Implement')
+            raise(NotImplementedError)
 
 
     def test_epoch(self):
-        epoch_loss = 0.0
-        self.model.eval()
-        with tqdm(total=len(self.testloader), ncols=80, desc=f'Valid:Epoch-{self.now_epoch}') as tbar:
-            for batch_id, data in enumerate(self.testloader):
-                L_chan, ab_chan = data
-                L_chan = L_chan.to(self.DEVICES)
-                ab_chan = ab_chan.to(self.DEVICES)
-                ab_out = self.model(L_chan)
-                loss = self.mse_loss(ab_chan, ab_out)
-                batch_loss = loss.item()
-                epoch_loss += batch_loss * data[0].shape[0]
-                tbar.update(1)
-                if batch_id % 100 == 0:
-                    self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-valid/{self.now_epoch}_{batch_id}.jpg')
+        if self.args.model == "LCI":
+            epoch_loss = 0.0
+            self.model.eval()
+            with tqdm(total=len(self.testloader), ncols=80, desc=f'Valid:Epoch-{self.now_epoch}') as tbar:
+                for batch_id, data in enumerate(self.testloader):
+                    L_chan, ab_chan = data
+                    L_chan = L_chan.to(self.DEVICES)
+                    ab_chan = ab_chan.to(self.DEVICES)
+                    ab_out = self.model(L_chan)
+                    loss = self.mse_loss(ab_chan, ab_out)
+                    batch_loss = loss.item()
+                    epoch_loss += batch_loss * data[0].shape[0]
+                    tbar.update(1)
+                    if batch_id % 100 == 0:
+                        self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-valid/{self.now_epoch}_{batch_id}.jpg')
 
-        epoch_loss /= len(self.testset)
-        self.write_to_csv(self.LOG_DIR+'test_epoch_loss.csv', [epoch_loss, ])
+            epoch_loss /= len(self.testset)
+            self.write_to_csv(self.LOG_DIR+'test_epoch_loss.csv', [epoch_loss, ])
+        elif self.args.model == "P2P":
+            epoch_loss = 0.0
+            self.model.eval()
+            with tqdm(total=len(self.testloader), ncols=80, desc=f'Valid:Epoch-{self.now_epoch}') as tbar:
+                for batch_id, data in enumerate(self.testloader):
+                    L_chan, ab_chan = data
+                    L_chan = L_chan.to(self.DEVICES)
+                    ab_chan = ab_chan.to(self.DEVICES)
+                    ab_out = self.model.netG(L_chan)
+                    loss = self.mse_loss(ab_chan, ab_out)
+                    batch_loss = loss.item()
+                    epoch_loss += batch_loss * data[0].shape[0]
+                    tbar.update(1)
+                    if batch_id % 100 == 0:
+                        self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-valid/{self.now_epoch}_{batch_id}.jpg')
+
+            epoch_loss /= len(self.testset)
+            self.write_to_csv(self.LOG_DIR+'test_epoch_loss.csv', [epoch_loss, ])
+        else :
+            print('Not Implement')
+            raise(NotImplementedError)
 
     def run(self):
 

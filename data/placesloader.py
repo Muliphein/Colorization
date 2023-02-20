@@ -67,7 +67,7 @@ class ImageDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         image = io.imread(self.pic_list[idx])
         L_chan, ab_chan = self.trans(image)
-        return L_chan, ab_chan
+        return L_chan.cuda(), ab_chan.cuda()
     
 
 
