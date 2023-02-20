@@ -1,0 +1,1 @@
+call python main.py --mode train --model LCI --bs 32 --num_workers 8

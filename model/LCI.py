@@ -12,7 +12,7 @@ class LCI(nn.Module):
         self.lowlevelfeat_channel_size = [1, 64, 128, 128, 256, 256, 512]
         self.lowlevelfeat_kernel_size = [3, 3, 3, 3, 3, 3]
         self.lowlevelfeat_stride_size = [2, 1, 2, 1, 2, 1]
-        self.lowlevelfeat_conv= [
+        self.lowlevelfeat_conv= nn.ModuleList([
             nn.Conv2d(
                 in_channels = self.lowlevelfeat_channel_size[i],
                 out_channels = self.lowlevelfeat_channel_size[i+1],
@@ -20,22 +20,22 @@ class LCI(nn.Module):
                 kernel_size = self.lowlevelfeat_kernel_size[i],
                 padding=1
             ) for i in range(6)
-        ]
+        ])
         # print(self.lowlevelfeat_conv)
 
-        self.midlevelfeat_conv= [
+        self.midlevelfeat_conv= nn.ModuleList([
             nn.Conv2d(
                 in_channels = 512, out_channels = 512, stride = 1, kernel_size = 3, padding=1
             ),
             nn.Conv2d(
                 in_channels = 512, out_channels = 256, stride = 1, kernel_size = 3, padding=1
             ),
-        ]
+        ])
         
         self.globalfeat_channels_size = [512, 512, 512, 512, 512]
         self.globalfeat_kernel_size = [3, 3, 3, 3]
         self.globalfeat_stride_size = [2, 1, 2, 1]
-        self.globalfeat_conv = [
+        self.globalfeat_conv = nn.ModuleList([
             nn.Conv2d(
                 in_channels = self.globalfeat_channels_size[i],
                 out_channels = self.globalfeat_channels_size[i+1],
@@ -43,13 +43,13 @@ class LCI(nn.Module):
                 kernel_size = self.globalfeat_kernel_size[i],
                 padding=1
             ) for i in range(4)
-        ]
+        ])
 
         self.global_linear_size = [7*7*512, 1024, 512, 256]
-        self.global_linear = [
+        self.global_linear = nn.ModuleList([
             nn.Linear(self.global_linear_size[i], self.global_linear_size[i+1])
             for i in range(3)
-        ]
+        ])
 
         self.fusion_layer = nn.Conv2d(512, 256, 1, 1, 0)
 
@@ -123,5 +123,4 @@ if __name__ == "__main__":
     print(f'Model LCI Input Shape : {input.shape} ', end='')
     output = model(input)
     print(f'Output Shape : {output.shape}')
-
     pass
