@@ -22,6 +22,10 @@ class InputTransCombine():
 
         image = image[offset_h: offset_h + self.crop_size, offset_w: offset_w + self.crop_size]
 
+        # print(f' R Channel {image[:, :, :1].min()} {image[:, :, :1].max()}') # [0, 100]
+        # print(f' G Channel {image[:, :, 1:2].min()} {image[:, :, 1:2].max()}') # [-128, 127]
+        # print(f' B Channel {image[:, :, 2:].min()} {image[:, :, 2:].max()}') #[-128, 127]
+
         img_lab = color.rgb2lab(image) # H, W, 3
 
         # print(f' L Channel {img_lab[:, :, :1].min()} {img_lab[:, :, :1].max()}') # [0, 100]
@@ -36,6 +40,10 @@ class InputTransCombine():
         img_tensor = torch.from_numpy(img_lab_t)
 
         (L_chan, ab_chan) = img_tensor[:1, :, :], img_tensor[1:, :, :]
+
+        # print(f' img_tensor Channel {img_tensor[:, :, :1].min()} {img_tensor[:, :, :1].max()}') # [0, 100]
+        # print(f' img_tensor Channel {img_tensor[:, :, 1:2].min()} {img_tensor[:, :, 1:2].max()}') # [-128, 127]
+        # print(f' img_tensor Channel {img_tensor[:, :, 2:].min()} {img_tensor[:, :, 2:].max()}') #[-128, 127]
 
         return (L_chan, ab_chan)
 
@@ -67,7 +75,10 @@ class ImageDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         image = io.imread(self.pic_list[idx])
         L_chan, ab_chan = self.trans(image)
-        return L_chan.cuda(), ab_chan.cuda()
+        return L_chan, ab_chan
+
+    def __len__(self):
+        return len(self.pic_list)
     
 
 

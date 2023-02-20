@@ -138,6 +138,7 @@ class Training():
         pass
 
     def save_pic(self, L_chan, ab_chan, ab_out, name):
+        # print(f' L_chan {L_chan.min()} {L_chan.max()}')
         # DeNorm
         if L_chan.shape[0] > 16:
             L_chan = L_chan[:16, :, :, :]
@@ -178,10 +179,11 @@ class Training():
         for i in range(len(pic_list)//2):
             double_pic_list.append(np.concatenate([pic_list[i*2], pic_list[i*2+1]], axis=1))
 
-        img_all = (np.concatenate(double_pic_list, axis=0)*255).astype(np.uint8)
+        img_all = (np.concatenate(double_pic_list, axis=0)*255).clip(0, 255).astype(np.uint8)
         # print(f'img_all {img_all.shape} {img_all.min()},{img_all.max()}')
         
         io.imsave(name, img_all)
+        # exit()
 
     def train_epoch(self):
         if self.args.model == "LCI":
@@ -190,6 +192,7 @@ class Training():
             with tqdm(total=len(self.trainloader), ncols=80, desc=f'Train:Epoch-{self.now_epoch}') as tbar:
                 for batch_id, data in enumerate(self.trainloader):
                     L_chan, ab_chan = data
+                    # print(L_chan.min(), L_chan.max())
                     L_chan = L_chan.to(self.DEVICES)
                     ab_chan = ab_chan.to(self.DEVICES)
                     self.optimizer.zero_grad()
@@ -201,7 +204,7 @@ class Training():
                     self.write_to_csv(self.LOG_DIR+'train_batch.csv', [batch_id, batch_loss])
                     epoch_loss += batch_loss * data[0].shape[0]
                     tbar.update(1)
-                    if batch_id % 1000 == 0:
+                    if batch_id % 10000 == 0:
                         self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-train/{self.now_epoch}_{batch_id}.jpg')
 
             epoch_loss /= len(self.trainset)
@@ -237,7 +240,7 @@ class Training():
                     epoch_loss_G += batch_loss * data[0].shape[0]
                     self.write_to_csv(self.LOG_DIR+'train_batch.csv', [batch_id, batch_loss, batch_d_loss])
 
-                    if batch_id % 1000 == 0:
+                    if batch_id % 10000 == 0:
                         self.save_pic(L_chan, ab_chan, ab_fake, self.LOG_DIR + f'images-train/{self.now_epoch}_{batch_id}.jpg')
 
             epoch_loss_G /= len(self.trainset)
@@ -261,7 +264,7 @@ class Training():
                     batch_loss = loss.item()
                     epoch_loss += batch_loss * data[0].shape[0]
                     tbar.update(1)
-                    if batch_id % 100 == 0:
+                    if batch_id % 1000 == 0:
                         self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-valid/{self.now_epoch}_{batch_id}.jpg')
 
             epoch_loss /= len(self.testset)
@@ -279,7 +282,7 @@ class Training():
                     batch_loss = loss.item()
                     epoch_loss += batch_loss * data[0].shape[0]
                     tbar.update(1)
-                    if batch_id % 100 == 0:
+                    if batch_id % 1000 == 0:
                         self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-valid/{self.now_epoch}_{batch_id}.jpg')
 
             epoch_loss /= len(self.testset)
