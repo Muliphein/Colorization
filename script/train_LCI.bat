@@ -1,1 +1,1 @@
-call python main.py --mode train --model LCI --bs 32 --num_workers 8
+call python main.py --mode train --model LCI --bs 128 --num_workers 8 --train_report_batch_freq 2500 --valid_report_batch_freq 100 --ckpt ./logs/LCI_Places/ckpt/0.pt

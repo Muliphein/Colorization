@@ -25,6 +25,8 @@ def deal_args():
     parser.add_argument('--bs', type=int, default=256)
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--p2p_lambda', type=float, default=10.0)
+    parser.add_argument('--train_report_batch_freq', type=int, default=2500)
+    parser.add_argument('--valid_report_batch_freq', type=int, default=100)
     args = parser.parse_args()
     return args
 
@@ -102,6 +104,9 @@ class Training():
         else:
             raise(NotImplementedError)
         print(f'Load CheckPoint {ckpt}')
+        self.now_epoch -= 1
+        self.test_epoch()
+        self.now_epoch += 1
 
     def save_ckpt(self):
         ckpt_save_path = self.LOG_DIR + f'ckpt/{self.now_epoch}.pt'
@@ -201,10 +206,10 @@ class Training():
                     loss.backward()
                     self.optimizer.step()
                     batch_loss = loss.item()
-                    self.write_to_csv(self.LOG_DIR+'train_batch.csv', [batch_id, batch_loss])
+                    self.write_to_csv(self.LOG_DIR+'train_batch.csv', [self.now_epoch, batch_id, batch_loss])
                     epoch_loss += batch_loss * data[0].shape[0]
                     tbar.update(1)
-                    if batch_id % 10000 == 0:
+                    if batch_id % self.args.train_report_batch_freq == 0:
                         self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-train/{self.now_epoch}_{batch_id}.jpg')
 
             epoch_loss /= len(self.trainset)
@@ -238,9 +243,9 @@ class Training():
                     batch_loss = l_loss.item()/self.args.p2p_lambda
                     batch_d_loss = d_loss.item()
                     epoch_loss_G += batch_loss * data[0].shape[0]
-                    self.write_to_csv(self.LOG_DIR+'train_batch.csv', [batch_id, batch_loss, batch_d_loss])
+                    self.write_to_csv(self.LOG_DIR+'train_batch.csv', [self.now_epoch, batch_id, batch_loss, batch_d_loss])
 
-                    if batch_id % 10000 == 0:
+                    if batch_id % self.args.train_report_batch_freq == 0:
                         self.save_pic(L_chan, ab_chan, ab_fake, self.LOG_DIR + f'images-train/{self.now_epoch}_{batch_id}.jpg')
 
             epoch_loss_G /= len(self.trainset)
@@ -254,45 +259,47 @@ class Training():
         if self.args.model == "LCI":
             epoch_loss = 0.0
             self.model.eval()
-            with tqdm(total=len(self.testloader), ncols=80, desc=f'Valid:Epoch-{self.now_epoch}') as tbar:
-                for batch_id, data in enumerate(self.testloader):
-                    L_chan, ab_chan = data
-                    L_chan = L_chan.to(self.DEVICES)
-                    ab_chan = ab_chan.to(self.DEVICES)
-                    ab_out = self.model(L_chan)
-                    loss = self.mse_loss(ab_chan, ab_out)
-                    batch_loss = loss.item()
-                    epoch_loss += batch_loss * data[0].shape[0]
-                    tbar.update(1)
-                    if batch_id % 1000 == 0:
-                        self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-valid/{self.now_epoch}_{batch_id}.jpg')
+            with torch.no_grad():
+                with tqdm(total=len(self.testloader), ncols=80, desc=f'Valid:Epoch-{self.now_epoch}') as tbar:
+                    for batch_id, data in enumerate(self.testloader):
+                        L_chan, ab_chan = data
+                        L_chan = L_chan.to(self.DEVICES)
+                        ab_chan = ab_chan.to(self.DEVICES)
+                        ab_out = self.model(L_chan)
+                        loss = self.mse_loss(ab_chan, ab_out)
+                        batch_loss = loss.item()
+                        epoch_loss += batch_loss * data[0].shape[0]
+                        tbar.update(1)
+                        if batch_id % self.args.valid_report_batch_freq == 0:
+                            self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-valid/{self.now_epoch}_{batch_id}.jpg')
 
-            epoch_loss /= len(self.testset)
-            self.write_to_csv(self.LOG_DIR+'test_epoch_loss.csv', [epoch_loss, ])
+                epoch_loss /= len(self.testset)
+                self.write_to_csv(self.LOG_DIR+'test_epoch_loss.csv', [self.now_epoch, epoch_loss, ])
         elif self.args.model == "P2P":
             epoch_loss = 0.0
             self.model.eval()
-            with tqdm(total=len(self.testloader), ncols=80, desc=f'Valid:Epoch-{self.now_epoch}') as tbar:
-                for batch_id, data in enumerate(self.testloader):
-                    L_chan, ab_chan = data
-                    L_chan = L_chan.to(self.DEVICES)
-                    ab_chan = ab_chan.to(self.DEVICES)
-                    ab_out = self.model.netG(L_chan)
-                    loss = self.mse_loss(ab_chan, ab_out)
-                    batch_loss = loss.item()
-                    epoch_loss += batch_loss * data[0].shape[0]
-                    tbar.update(1)
-                    if batch_id % 1000 == 0:
-                        self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-valid/{self.now_epoch}_{batch_id}.jpg')
+            with torch.no_grad():
+                with tqdm(total=len(self.testloader), ncols=80, desc=f'Valid:Epoch-{self.now_epoch}') as tbar:
+                    for batch_id, data in enumerate(self.testloader):
+                        L_chan, ab_chan = data
+                        L_chan = L_chan.to(self.DEVICES)
+                        ab_chan = ab_chan.to(self.DEVICES)
+                        ab_out = self.model.netG(L_chan)
+                        loss = self.mse_loss(ab_chan, ab_out)
+                        batch_loss = loss.item()
+                        epoch_loss += batch_loss * data[0].shape[0]
+                        tbar.update(1)
+                        if batch_id % self.args.valid_report_batch_freq == 0:
+                            self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-valid/{self.now_epoch}_{batch_id}.jpg')
 
-            epoch_loss /= len(self.testset)
-            self.write_to_csv(self.LOG_DIR+'test_epoch_loss.csv', [epoch_loss, ])
+                epoch_loss /= len(self.testset)
+                self.write_to_csv(self.LOG_DIR+'test_epoch_loss.csv', [self.now_epoch, epoch_loss, ])
         else :
             print('Not Implement')
             raise(NotImplementedError)
 
     def run(self):
-
+        
         while self.now_epoch < self.EPOCH_MAX:
             self.train_epoch()
             self.save_ckpt()
