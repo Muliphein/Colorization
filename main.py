@@ -44,8 +44,8 @@ class Training():
             raise(NotImplementedError)
 
         if args.dataset == "Places":
-            self.testset = ImageDataset('./data/Places205/testset/')
-            self.trainset = ImageDataset('./data/Places205/trainset/')
+            self.testset = ImageDataset('./data/Places205/testset/', crop_size=args.crop_size)
+            self.trainset = ImageDataset('./data/Places205/trainset/', crop_size=args.crop_size)
         else:
             raise(NotImplementedError)
 
@@ -149,9 +149,9 @@ class Training():
             L_chan = L_chan[:16, :, :, :]
             ab_out = ab_out[:16, :, :, :]
             ab_chan = ab_chan[:16, :, :, :]
-        L_chan = L_chan.detach().cpu().numpy() * 100.0
-        ab_out = ab_out.detach().cpu().numpy() * 256.0 - 128.0
-        ab_chan = ab_chan.detach().cpu().numpy() * 256.0 - 128.0
+        L_chan = (L_chan.detach().cpu().numpy() * 100.0).clip(0, 100)
+        ab_out = (ab_out.detach().cpu().numpy() * 256.0 - 128.0).clip(-128, 127)
+        ab_chan = (ab_chan.detach().cpu().numpy() * 256.0 - 128.0).clip(-128, 127)
         pic_list = []
         for i in range(L_chan.shape[0]):
             L = L_chan[i]       #[1, h, w]
@@ -222,6 +222,8 @@ class Training():
                     L_chan, ab_chan = data
                     L_chan = L_chan.to(self.DEVICES)
                     ab_chan = ab_chan.to(self.DEVICES)
+
+                    # Train discrimnator
                     ab_fake = self.model.netG(L_chan)
                     d_real = self.model.netD(L_chan, ab_chan)
                     d_real_loss = self.bce_loss(d_real, torch.ones_like(d_real))
@@ -232,9 +234,11 @@ class Training():
                     d_loss.backward()
                     self.optimizerD.step()
 
-                    g_fake = self.netG(L_chan, ab_fake)
+                    # Train Generator
+                    ab_fake = self.model.netG(L_chan)
+                    g_fake = self.model.netD(L_chan, ab_fake)
                     g_fake_loss = self.bce_loss(g_fake, torch.ones_like(g_fake))
-                    l_loss = self.mse_loss(ab_fake, ab_chan) * self.args.p2p_lambda
+                    l_loss = self.l1_loss(ab_fake, ab_chan) * self.args.p2p_lambda
                     g_loss = l_loss + g_fake_loss
                     self.optimizerG.zero_grad()
                     g_loss.backward()
@@ -243,8 +247,9 @@ class Training():
                     batch_loss = l_loss.item()/self.args.p2p_lambda
                     batch_d_loss = d_loss.item()
                     epoch_loss_G += batch_loss * data[0].shape[0]
-                    self.write_to_csv(self.LOG_DIR+'train_batch.csv', [self.now_epoch, batch_id, batch_loss, batch_d_loss])
+                    self.write_to_csv(self.LOG_DIR+'train_batch.csv', [self.now_epoch, batch_id, batch_loss, batch_d_loss, g_fake_loss.item()])
 
+                    tbar.update(1)
                     if batch_id % self.args.train_report_batch_freq == 0:
                         self.save_pic(L_chan, ab_chan, ab_fake, self.LOG_DIR + f'images-train/{self.now_epoch}_{batch_id}.jpg')
 
@@ -329,7 +334,7 @@ if __name__ == "__main__":
             assert(False)
         print('Result Save to '+f'./result/{args.model}.bmp')
     elif args.mode == 'train':
-        if args.model == "LCI":
+        if args.model == "LCI" or args.model == "P2P":
             runner = Training(args)
             runner.run()
         else:

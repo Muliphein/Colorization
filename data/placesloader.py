@@ -66,7 +66,7 @@ class ImageDataset(torch.utils.data.Dataset):
         with open(root+'imgList.csv', 'r') as csvfile:
             csvreader = csv.reader(csvfile, dialect='excel')
             for name in csvreader:
-                self.pic_list.append(root + name[0])
+                self.pic_list.append((root + name[0]).replace('\\', '/'))
                 # print(f'Add Pic {root + name[0]}')
                 # exit()
             

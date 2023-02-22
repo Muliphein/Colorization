@@ -120,3 +120,11 @@ class P2P(nn.Module):
     def forward(self, x, y):
         raise(NotImplementedError)
     
+if __name__ == "__main__":
+    model = P2P()
+    inputG = torch.randn([16, 1, 256, 256])
+    outputG = model.netG(inputG)
+    print(f'G net {inputG.shape} -> {outputG.shape}')
+    inputD1, inputD2 = torch.randn([16, 1, 256, 256]), torch.randn([16, 2, 256, 256])
+    outputD = model.netD(inputD1, inputD2)
+    print(f'G net {inputD1.shape} + {inputD2.shape} -> {outputD.shape}')

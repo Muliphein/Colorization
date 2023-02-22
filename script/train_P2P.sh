@@ -1,0 +1,1 @@
+python main.py --mode train --model P2P --bs 128 --num_workers 20 --train_report_batch_freq 2500 --valid_report_batch_freq 100 --crop_size 256
