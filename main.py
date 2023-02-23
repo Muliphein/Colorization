@@ -24,7 +24,7 @@ def deal_args():
     parser.add_argument('--epoch', type=int, default=200)
     parser.add_argument('--bs', type=int, default=256)
     parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--p2p_lambda', type=float, default=10.0)
+    parser.add_argument('--p2p_lambda', type=float, default=100.0)
     parser.add_argument('--train_report_batch_freq', type=int, default=2500)
     parser.add_argument('--valid_report_batch_freq', type=int, default=100)
     args = parser.parse_args()
