@@ -1,0 +1,1 @@
+python main.py --mode train --model DDPM --bs 8 --num_workers 8 --train_report_batch_freq 2500 --valid_report_batch_freq 100 --crop_size 224

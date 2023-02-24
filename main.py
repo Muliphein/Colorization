@@ -1,5 +1,5 @@
 import cv2 as cv
-from model import CO, LCI, P2P
+from model import CO, LCI, P2P, DDPM
 import numpy as np
 import torch
 import torch.nn as nn
@@ -40,6 +40,8 @@ class Training():
             self.model = LCI()
         elif args.model == "P2P":
             self.model = P2P()
+        elif args.model == "DDPM":
+            self.model = DDPM()
         else:
             raise(NotImplementedError)
 
@@ -75,7 +77,7 @@ class Training():
         self.l1_loss = nn.L1Loss()
 
         # Set Optim (Model-Based)
-        if args.model == "LCI":
+        if args.model == "LCI" or args.model == "DDPM":
             self.optimizer = torch.optim.Adam(self.model.parameters())
         elif args.model == "P2P":
             self.optimizerG = torch.optim.Adam(self.model.netG.parameters())
@@ -90,7 +92,7 @@ class Training():
     
     def load_ckpt(self, ckpt):
         # Load CKPT (Model-Based)
-        if self.args.model == "LCI":
+        if self.args.model == "LCI" or self.args.model == "DDPM":
             checkpoint = torch.load(ckpt, map_location=torch.device("cpu"))
             self.model.load_state_dict(checkpoint['model'])
             self.optimizer.load_state_dict(checkpoint['optim'])
@@ -113,7 +115,7 @@ class Training():
         
         # Save CKPT (Model-Based)
         
-        if self.args.model == "LCI":
+        if self.args.model == "LCI" or self.args.model == "DDPM":
             torch.save(
                 {
                     'epoch' : self.now_epoch,
@@ -255,10 +257,33 @@ class Training():
 
             epoch_loss_G /= len(self.trainset)
             self.write_to_csv(self.LOG_DIR+'train_epoch_loss.csv', [epoch_loss_G, ])
+        elif self.args.model == "DDPM":
+            epoch_loss = 0.0
+            self.model.train()
+            with tqdm(total=len(self.trainloader), ncols=80, desc=f'Train:Epoch-{self.now_epoch}') as tbar:
+                for batch_id, data in enumerate(self.trainloader):
+                    L_chan, ab_chan = data
+                    # print(L_chan.min(), L_chan.max())
+                    L_chan = L_chan.to(self.DEVICES)
+                    ab_chan = ab_chan.to(self.DEVICES)
+                    self.optimizer.zero_grad()
+                    loss = self.model(ab_chan, L_chan)
+                    loss.backward()
+                    self.optimizer.step()
+
+                    batch_loss = loss.item()
+                    self.write_to_csv(self.LOG_DIR+'train_batch.csv', [self.now_epoch, batch_id, batch_loss])
+                    epoch_loss += batch_loss * data[0].shape[0]
+                    tbar.update(1)
+                    if batch_id % self.args.train_report_batch_freq == 0:
+                        ab_out, _ = self.model.restoration(L_chan, sample_num=8)
+                        self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-train/{self.now_epoch}_{batch_id}.jpg')
+
+            epoch_loss /= len(self.trainset)
+            self.write_to_csv(self.LOG_DIR+'train_epoch_loss.csv', [epoch_loss, ])
         else :
             print('Not Implement')
             raise(NotImplementedError)
-
 
     def test_epoch(self):
         if self.args.model == "LCI":
@@ -290,6 +315,25 @@ class Training():
                         L_chan = L_chan.to(self.DEVICES)
                         ab_chan = ab_chan.to(self.DEVICES)
                         ab_out = self.model.netG(L_chan)
+                        loss = self.mse_loss(ab_chan, ab_out)
+                        batch_loss = loss.item()
+                        epoch_loss += batch_loss * data[0].shape[0]
+                        tbar.update(1)
+                        if batch_id % self.args.valid_report_batch_freq == 0:
+                            self.save_pic(L_chan, ab_chan, ab_out, self.LOG_DIR + f'images-valid/{self.now_epoch}_{batch_id}.jpg')
+
+                epoch_loss /= len(self.testset)
+                self.write_to_csv(self.LOG_DIR+'test_epoch_loss.csv', [self.now_epoch, epoch_loss, ])
+        elif self.args.model == "DDPM":
+            epoch_loss = 0.0
+            self.model.eval()
+            with torch.no_grad():
+                with tqdm(total=len(self.testloader), ncols=80, desc=f'Valid:Epoch-{self.now_epoch}') as tbar:
+                    for batch_id, data in enumerate(self.testloader):
+                        L_chan, ab_chan = data
+                        L_chan = L_chan.to(self.DEVICES)
+                        ab_chan = ab_chan.to(self.DEVICES)
+                        ab_out, _ = self.model.restoration(L_chan, y_t = L_chan, sample_num=8)
                         loss = self.mse_loss(ab_chan, ab_out)
                         batch_loss = loss.item()
                         epoch_loss += batch_loss * data[0].shape[0]
@@ -334,7 +378,7 @@ if __name__ == "__main__":
             assert(False)
         print('Result Save to '+f'./result/{args.model}.bmp')
     elif args.mode == 'train':
-        if args.model == "LCI" or args.model == "P2P":
+        if args.model == "LCI" or args.model == "P2P" or args.model == "DDPM":
             runner = Training(args)
             runner.run()
         else:

@@ -1,1 +1,1 @@
-python main.py --mode train --model P2P --bs 128 --num_workers 20 --train_report_batch_freq 2500 --valid_report_batch_freq 100 --crop_size 256 --p2p_lambda 400.0
+python main.py --mode train --model P2P --bs 128 --num_workers 20 --train_report_batch_freq 2500 --valid_report_batch_freq 100 --crop_size 256 --p2p_lambda 1500.0 --ckpt ./logs/P2P_Places/ckpt/1.pt
