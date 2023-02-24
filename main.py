@@ -77,8 +77,10 @@ class Training():
         self.l1_loss = nn.L1Loss()
 
         # Set Optim (Model-Based)
-        if args.model == "LCI" or args.model == "DDPM":
+        if args.model == "LCI":
             self.optimizer = torch.optim.Adam(self.model.parameters())
+        elif args.model == "DDPM":
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-4)
         elif args.model == "P2P":
             self.optimizerG = torch.optim.Adam(self.model.netG.parameters())
             self.optimizerD = torch.optim.Adam(self.model.netD.parameters())
@@ -269,6 +271,7 @@ class Training():
                     self.optimizer.zero_grad()
                     loss = self.model(ab_chan, L_chan)
                     loss.backward()
+                    torch.nn.utils.clip_grad_norm(self.model.parameters(), 1.0)
                     self.optimizer.step()
 
                     batch_loss = loss.item()

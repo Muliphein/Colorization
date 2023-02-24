@@ -414,7 +414,6 @@ class DDPM(nn.Module):
         image_size = 224,
         timesteps = 1000,
         sampling_timesteps = None,
-        beta_schedule = 'sigmoid',
         schedule_fn_kwargs = dict(),
         p2_loss_weight_gamma = 0., # p2 loss weight, from https://arxiv.org/abs/2204.00227 - 0 is equivalent to weight of 1 across time - 1. is recommended
         p2_loss_weight_k = 1,
@@ -451,10 +450,9 @@ class DDPM(nn.Module):
 
     def predict_start_from_noise(self, y_t, t, noise):
         return (
-            extract(self.sqrt_recip_alphas_cumprod, t, y_t.shape) * y_t -
-            extract(self.sqrt_recipm1_alphas_cumprod, t, y_t.shape) * noise
+            extract(self.sqrt_recip_gammas, t, y_t.shape) * y_t -
+            extract(self.sqrt_recipm1_gammas, t, y_t.shape) * noise
         )
-
     
     def q_posterior(self, y_0_hat, y_t, t):
         posterior_mean = (
@@ -465,10 +463,10 @@ class DDPM(nn.Module):
         return posterior_mean, posterior_log_variance_clipped
 
     def p_mean_variance(self, y_t, t, clip_denoised: bool, y_cond=None):
-        print(y_cond.shape, '  - ', y_t.shape)
+        # print(y_cond.shape, '  - ', y_t.shape)
         noise_level = extract(self.gammas, t, x_shape=(1, 1)).to(y_t.device)
         y_0_hat = self.predict_start_from_noise(
-                y_t, t=t, noise=self.denoise_fn(torch.cat([y_cond, y_t], dim=1), noise_level))
+                y_t, t=t, noise=self.denoise_fn(torch.cat([y_cond, y_t], dim=1), noise_level.squeeze()))
 
         if clip_denoised:
             y_0_hat.clamp_(-1., 1.)
@@ -498,7 +496,7 @@ class DDPM(nn.Module):
         assert self.num_timesteps > sample_num, 'num_timesteps must greater than sample_num'
         sample_inter = (self.num_timesteps//sample_num)
         
-        y_t = default(y_t, lambda: torch.randn_like(y_cond))
+        y_t = default(y_t, lambda: torch.randn([8, 2, 224, 224])).cuda()
         ret_arr = y_t
         for i in tqdm(reversed(range(0, self.num_timesteps)), desc='sampling loop time step', total=self.num_timesteps):
             t = torch.full((b,), i, device=y_cond.device, dtype=torch.long)
