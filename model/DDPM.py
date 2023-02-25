@@ -446,7 +446,7 @@ class DDPM(nn.Module):
         self.register_buffer('posterior_log_variance_clipped', torch.from_numpy(np.log(np.maximum(posterior_variance, 1e-20))).float())
         self.register_buffer('posterior_mean_coef1', torch.from_numpy(betas * np.sqrt(gammas_prev) / (1. - gammas)).float())
         self.register_buffer('posterior_mean_coef2', torch.from_numpy((1. - gammas_prev) * np.sqrt(alphas) / (1. - gammas)).float())
-        self.loss_fn = F.l1_loss
+        self.loss_fn = F.mse_loss
 
     def predict_start_from_noise(self, y_t, t, noise):
         return (
