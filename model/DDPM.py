@@ -1,3 +1,7 @@
+# Denoising Diffusion Probabilistic Models
+# Ho, Jonathan and Jain, Ajay and Abbeel, Pieter
+# Advances in Neural Information Processing Systems, 2020
+
 import math
 import copy
 from pathlib import Path
