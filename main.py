@@ -11,7 +11,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from skimage import io, color
 
-INPUT_CASE = './data/CUO_Example/'
+INPUT_CASE = './data/CUO_Example_2/'
 
 def deal_args():
     parser = argparse.ArgumentParser(description='Colorization Setting')
